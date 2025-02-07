@@ -11,26 +11,28 @@ if [ -z "$archivos_encontrados" ]; then
 else 
     for archivo in $archivos_encontrados; do
         echo "=== $archivo ==="
-        echo "Direcciones de correo:"
-        awk -v RS='\n' '/^(Delivered-To|From|To):/ {
-            buffer = $0
-            while(getline line && line ~ /^[[:space:]]/) {
-                buffer = buffer line
-            }
-            if (buffer ~ /@/) {
-                match(buffer, /[^[:space:]<>:]*@[^[:space:]<>:]*/)
-                print substr(buffer, RSTART, RLENGTH)
-            }
-            if (line !~ /^[[:space:]]/) {
-                printf "%s\n", line | "cat"
+        echo "Usuarios de correo:"
+        awk -v RS='\n' -v remitente="$remitente" '/^(From:|To:|Delivered-To:)[ \t]+/ {
+            if ($0 ~ /^(From:|To:|Delivered-To:)[ \t]+/) {
+                buffer = $0
+                while(getline line && line ~ /^[[:space:]]/) {
+                    buffer = buffer line
+                }
+                if (buffer ~ /@/) {
+                    # Modificación para extraer solo usuarios
+                    split(buffer, emails, ",")
+                    for (i in emails) {
+                        if (match(emails[i], /[^[:space:]<>:]*@/)) {
+                            usuario = substr(emails[i], RSTART, RLENGTH-1)
+                            gsub(/^[[:space:]]+|[[:space:]]+$/, "", usuario)
+                            if (usuario ~ /^[a-z]/ && usuario != substr(remitente, 1, index(remitente, "@")-1)) {
+                                print usuario
+                            }
+                        }
+                    }
+                }
             }
         }' "$archivo" | sort -u
-        
-        if grep -i "client-ip:" "$archivo" > /dev/null; then
-            echo "IPs únicas del cliente:"
-            grep -i "client-ip:" "$archivo" | sed 's/.*client-ip:\([^ ]*\).*/\1/' | sort -u
-        fi
-        echo
     done
 fi
 
